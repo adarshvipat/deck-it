@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Scrape events from a website and format them into ICS format using Ollama and Gemma 2B.
+Scrape events from a website and format them into ICS format using OpenRouter with Google Gemini 2.5 Flash Preview.
 """
 
 import requests
 from bs4 import BeautifulSoup
-import ollama
 import re
 from datetime import datetime
 import sys
@@ -81,17 +80,27 @@ def scrape_website(url: str) -> str:
         sys.exit(1)
 
 
-def extract_events_with_ollama(website_content: str, model: str = 'gemma2:2b') -> str:
+def extract_events_with_ollama(website_content: str, model: str = 'google/gemini-2.5-flash-preview-09-2025', api_key: Optional[str] = None) -> str:
     """
-    Use Ollama with Gemma to extract event information from website content.
+    Use OpenRouter with Google Gemini 2.5 Flash Preview to extract event information from website content.
     
     Args:
         website_content: The scraped website content
-        model: The Ollama model to use (default: gemma2:2b)
+        model: The OpenRouter model to use (default: google/gemini-2.5-flash-preview-09-2025)
+        api_key: OpenRouter API key (if None, will try to get from OPENROUTER_API_KEY environment variable)
         
     Returns:
         Formatted event information in ICS format
     """
+    # Get API key from parameter or environment variable
+    if api_key is None:
+        api_key = os.getenv('OPENROUTER_API_KEY')
+        if not api_key:
+            print("Error: OpenRouter API key is required.")
+            print("Please set the OPENROUTER_API_KEY environment variable or pass it as a parameter.")
+            print("You can get an API key from: https://openrouter.ai/keys")
+            sys.exit(1)
+    
     # Truncate content if too long (models have context limits)
     max_chars = 12000
     if len(website_content) > max_chars:
@@ -126,23 +135,56 @@ END:VEVENT
 Now extract and format all events from the website content:"""
 
     try:
-        print(f"Calling Ollama with {model} to extract events...")
-        response = ollama.chat(
-            model=model,
-            messages=[
-                {
-                    'role': 'user',
-                    'content': prompt
-                }
-            ]
-        )
+        print(f"Calling OpenRouter with {model} to extract events...")
         
-        ics_content = response['message']['content']
-        return ics_content
+        # OpenRouter API endpoint
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/yourusername/deck-it",  # Optional: for tracking
+            "X-Title": "Deck-it Event Scraper"  # Optional: for tracking
+        }
+        
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.3,  # Lower temperature for more consistent output
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        # Extract the content from the response
+        if 'choices' in result and len(result['choices']) > 0:
+            ics_content = result['choices'][0]['message']['content']
+            return ics_content
+        else:
+            print(f"Error: Unexpected response format from OpenRouter: {result}")
+            sys.exit(1)
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Error calling OpenRouter API: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_detail = e.response.json()
+                print(f"Error details: {error_detail}")
+            except:
+                print(f"HTTP Status Code: {e.response.status_code}")
+                print(f"Response: {e.response.text}")
+        print(f"Make sure your OpenRouter API key is valid and you have credits.")
+        print(f"You can get an API key from: https://openrouter.ai/keys")
+        sys.exit(1)
     except Exception as e:
-        print(f"Error calling Ollama: {e}")
-        print(f"Make sure Ollama is running and the {model} model is installed.")
-        print(f"You can install it with: ollama pull {model}")
+        print(f"Error: {e}")
         sys.exit(1)
 
 
@@ -199,7 +241,7 @@ def create_ics_file(events_ics: str, output_file: str = "events.ics"):
     
     if not events:
         print("No events found in the extracted content.")
-        print("Raw Ollama response:")
+        print("Raw OpenRouter response:")
         print(events_ics)
         return
     
@@ -235,14 +277,16 @@ def main():
     Main function to scrape website and generate ICS file.
     """
     if len(sys.argv) < 2:
-        print("Usage: python website_to_ics.py <website_url> [output_file.ics] [model_name]")
+        print("Usage: python website_to_ics.py <website_url> [output_file.ics] [model_name] [api_key]")
         print("Example: python website_to_ics.py https://example.com/events events.ics")
-        print("Example: python website_to_ics.py https://example.com/events events.ics gemma2:2b")
+        print("Example: python website_to_ics.py https://example.com/events events.ics google/gemini-2.5-flash-preview-09-2025")
+        print("Note: Set OPENROUTER_API_KEY environment variable or pass API key as 4th argument")
         sys.exit(1)
     
     website_url = sys.argv[1]
     output_file = sys.argv[2] if len(sys.argv) > 2 else "events.ics"
-    model = sys.argv[3] if len(sys.argv) > 3 else 'gemma2:2b'
+    model = sys.argv[3] if len(sys.argv) > 3 else 'google/gemini-2.5-flash-preview-09-2025'
+    api_key = sys.argv[4] if len(sys.argv) > 4 else None
     
     print(f"Scraping website: {website_url}")
     website_content = scrape_website(website_url)
@@ -254,7 +298,7 @@ def main():
     print(website_content)
     print("="*80 + "\n")
     
-    events_ics = extract_events_with_ollama(website_content, model)
+    events_ics = extract_events_with_ollama(website_content, model, api_key)
     
     create_ics_file(events_ics, output_file)
 
