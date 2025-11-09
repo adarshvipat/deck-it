@@ -24,7 +24,7 @@ def download_file(url, output_filename=None):
                 parsed_url = urlparse(url)
                 filename = os.path.basename(parsed_url.path)
                 if not filename or '.' not in filename:
-                    filename = 'downloaded_file.ics'  # Default for ICS files
+                    filename = 'canvas.ics'  # Default for ICS files
                 output_filename = filename
         
         # Download and save the file
