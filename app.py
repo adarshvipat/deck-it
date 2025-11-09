@@ -20,18 +20,28 @@ import json
 import link_to_file
 import website_to_ics
 
+user_data = ["canvas", "cust1", "cust2", "cust3", False, False]
+PULSE_LINK = "https://nam10.safelinks.protection.outlook.com/?url=https%3A%2F%2Fumassamherst.campuslabs.com%2Fengage%2Fevents.rss&data=05%7C02%7Cavipat%40umass.edu%7C6d97f951cb0c43f93bba08de1f07140a%7C7bd08b0b33954dc194bbd0b2e56a497f%7C0%7C0%7C638982312467157124%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=JBFkIVkgZb%2BJmd28TiVOboHtsPCjU%2BIeTKP5rnjqCn0%3D&reserved=0"
+EVENTS_LINK = "https://nam10.safelinks.protection.outlook.com/?url=https%3A%2F%2Fevents.umass.edu%2Fcalendar%2F1.xml&data=05%7C02%7Cavipat%40umass.edu%7C6d97f951cb0c43f93bba08de1f07140a%7C7bd08b0b33954dc194bbd0b2e56a497f%7C0%7C0%7C638982312467169986%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=mdI%2FtR9Jj8B973%2BXgoSCJkY0%2FUU6CrRThsplXHcxXiA%3D&reserved=0"
 
 
 # Starting list with 4 links as requested (simulate input from database)
-STARTING_LINKS: List[str] = [
-    "",           # file to download
+STARTING_LINKS: List = [
+    "https://umamherst.instructure.com/feeds/calendars/user_4P53rwLSe3MpHunzpOXy3t1ne94H8QcML7H8RfI5.ics",           # file to download
     "https://www.eventbrite.com/d/ma--hadley/events/",        # website to convert to ICS
     "",          # website to convert to ICS
     "",          # website to convert to ICS
-    ""
-    "",    
+    "",          # preference for campus pulse
+    ""           # preference for umass events
 ]
 
+# Check user_data for boolean True at positions 3 and 4 (0-based index)
+# If so, set STARTING_LINKS[4] and STARTING_LINKS[5] accordingly
+if isinstance(user_data, (list, tuple)):
+    if user_data[4] is True:
+        STARTING_LINKS[4] = PULSE_LINK
+    if user_data[5] is True:
+        STARTING_LINKS[5] = EVENTS_LINK
 
 def split_links(links: List[str]) -> Tuple[str, List[str]]:
     """Assume the first link is the file to download and the rest are website links.
@@ -43,7 +53,7 @@ def split_links(links: List[str]) -> Tuple[str, List[str]]:
         raise ValueError("Expected at least 2 links: 1 file link and 1 website link")
 
     file_link = links[0]
-    web_links = links[1:5]  # allow up to 4 website links
+    web_links = links[1:6]  # allow up to 4 website links
     return file_link, web_links
 
 
@@ -89,7 +99,7 @@ def execute(file_link: str, web_links: List[str]):
             # Attempt to extract events and create ICS. This function expects an API key
             # to be set in OPENROUTER_API_KEY or passed as parameter. We call it as-is so
             # it uses the environment variable.
-            events_ics = website_to_ics.extract_events_with_ollama(scraped)
+            events_ics = website_to_ics.extract_events_with_openrouter(scraped)
 
             # Write events to an ICS file. Name will default to events.ics and auto-increment
             website_to_ics.create_ics_file(events_ics)
@@ -154,6 +164,17 @@ def main(argv: List[str]):
         dry_run(file_link, web_links)
     else:
         execute(file_link, web_links)
+
+    # After all actions, extract events from all .ics files using file_to_list
+    import file_to_list
+    print("\nExtracting events from all .ics files...")
+    events = []
+    for fname in os.listdir('.'):
+        if fname.lower().endswith('.ics') and os.path.isfile(fname):
+            events.extend(file_to_list.extract_events_from_ics(fname))
+    print(f"Extracted {len(events)} events from .ics files.")
+    # Optionally, print the events list or process as needed
+    #print(events)
 
 
 if __name__ == '__main__':
