@@ -11,6 +11,9 @@ import sys
 import os
 from typing import List, Dict, Optional
 
+# Set your OpenRouter API key here
+OPENROUTER_API_KEY = ""  # <-- Replace with your actual API key
+
 
 def scrape_website(url: str) -> str:
     """
@@ -39,14 +42,11 @@ def scrape_website(url: str) -> str:
         
         # Use a session to maintain cookies
         session = requests.Session()
-        if url == "":
-            print("Empty URL provided for scraping.")
-            return "" 
         response = session.get(url, headers=headers, timeout=15, allow_redirects=True)
         
         # Check for specific HTTP status codes
         if response.status_code == 403:
-            print(f"\n 403 Forbidden Error: The website blocked the request.")
+            print(f"\n❌ 403 Forbidden Error: The website blocked the request.")
             print(f"   This usually means:")
             print(f"   • The website has anti-bot protection (Cloudflare, etc.)")
             print(f"   • The website requires authentication or cookies")
@@ -58,10 +58,10 @@ def scrape_website(url: str) -> str:
             print(f"   • Try a different URL or use the website's API if available")
             sys.exit(1)
         elif response.status_code == 401:
-            print(f"\n 401 Unauthorized: The website requires authentication.")
+            print(f"\n❌ 401 Unauthorized: The website requires authentication.")
             sys.exit(1)
         elif response.status_code == 404:
-            print(f"\n 404 Not Found: The URL doesn't exist.")
+            print(f"\n❌ 404 Not Found: The URL doesn't exist.")
             sys.exit(1)
         
         response.raise_for_status()
@@ -76,7 +76,7 @@ def scrape_website(url: str) -> str:
         text = soup.get_text(separator='\n', strip=True)
         return text
     except requests.RequestException as e:
-        print(f"\n Error scraping website: {e}")
+        print(f"\n❌ Error scraping website: {e}")
         if hasattr(e, 'response') and e.response is not None:
             print(f"   HTTP Status Code: {e.response.status_code}")
             print(f"   Response Headers: {dict(e.response.headers)}")
@@ -95,12 +95,12 @@ def extract_events_with_openrouter(website_content: str, model: str = 'google/ge
     Returns:
         Formatted event information in ICS format
     """
-    # Get API key from parameter or environment variable
+    # Get API key from parameter, variable, or environment variable
     if api_key is None:
-        api_key = os.getenv('OPENROUTER_API_KEY')
+        api_key = OPENROUTER_API_KEY or os.getenv('OPENROUTER_API_KEY')
         if not api_key:
             print("Error: OpenRouter API key is required.")
-            print("Please set the OPENROUTER_API_KEY environment variable or pass it as a parameter.")
+            print("Please set the OPENROUTER_API_KEY variable, environment variable, or pass it as a parameter.")
             print("You can get an API key from: https://openrouter.ai/keys")
             sys.exit(1)
     

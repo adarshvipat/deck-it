@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Event Deck</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* Minimal deck styles */
+    .deck-container { max-width:420px; margin:30px auto; position:relative; height:560px; }
+    .card { position:absolute; width:100%; height:100%; background:#fff; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.15); padding:20px; box-sizing:border-box; touch-action:none; user-select:none; display:flex; flex-direction:column; justify-content:space-between; }
+    .card h3 { margin:0 0 8px; }
+    .card .meta { color:#555; font-size:0.95em; }
+    .controls { display:flex; gap:12px; margin-top:12px; }
+    .btn { flex:1; padding:12px; border-radius:8px; border:none; cursor:pointer; font-weight:600; }
+    .btn.no { background:#ef476f; color:#fff; }
+    .btn.yes { background:#06d6a0; color:#fff; }
+    .link { color:#007BFF; text-decoration:none; word-break:break-all; }
+    .badge { position:absolute; top:18px; left:18px; background:rgba(0,0,0,0.05); padding:6px 10px; border-radius:6px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Swipe Events</h1>
+    <p style="text-align:right;margin-top:-6px;"><a href="{{ url_for('logout') }}">Logout</a></p>
+    <p style="text-align:center;margin-top:-8px;color:#666">Right = Yes, Left = No</p>
+
+    <div class="deck-container" id="deck">
+      {% for event in events|reverse %}
+      <div class="card" data-id="{{ event.id }}" style="z-index:{{ loop.index }}">
+        <div>
+          <h3>{{ event.name }}</h3>
+          <div class="meta">{{ event.title }} • {{ event.date }}• {{ event.start_time }}</div>
+          <p style="margin-top:14px;">{{ event.desc}}</p>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <small style="color:#888">Swipe</small>
+          </div>
+          <div class="controls">
+            <button class="btn no">No ←</button>
+            <button class="btn yes">Yes →</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <script>
+    // Basic swipe handling for pointer devices and mouse
+    const threshold = 100; // px to count as swipe
+    const deck = document.getElementById('deck');
+
+    function postVote(id, vote) {
+      fetch('/vote', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({id: id, vote: vote})
+      }).catch(()=>{ /* ignore errors */ });
+    }
+
+    function removeCard(card, toRight) {
+      card.style.transition = 'transform 300ms ease, opacity 300ms ease';
+      card.style.transform = `translateX(${toRight ? 1000 : -1000}px) rotate(${toRight?20:-20}deg)`;
+      card.style.opacity = '0';
+      setTimeout(()=> card.remove(), 350);
+    }
+
+    function attachCardHandlers(card) {
+      let startX = 0, startY = 0, currentX = 0, dragging = false;
+
+      card.querySelector('.btn.yes').addEventListener('click', () => {
+        const id = Number(card.dataset.id);
+        postVote(id, 'yes');
+        removeCard(card, true);
+      });
+
+      card.querySelector('.btn.no').addEventListener('click', () => {
+        const id = Number(card.dataset.id);
+        postVote(id, 'no');
+        removeCard(card, false);
+      });
+
+      card.addEventListener('pointerdown', e => {
+        dragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        card.setPointerCapture(e.pointerId);
+        card.style.transition = 'none';
+      });
+
+      card.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        currentX = e.clientX - startX;
+        const rotate = currentX / 12;
+        card.style.transform = `translateX(${currentX}px) rotate(${rotate}deg)`;
+      });
+
+      card.addEventListener('pointerup', e => {
+        dragging = false;
+        const id = Number(card.dataset.id);
+        if (Math.abs(currentX) > threshold) {
+          const toRight = currentX > 0;
+          postVote(id, toRight ? 'yes' : 'no');
+          removeCard(card, toRight);
+        } else {
+          card.style.transition = 'transform 200ms ease';
+          card.style.transform = '';
+        }
+        try { card.releasePointerCapture(e.pointerId); } catch(_) {}
+        currentX = 0;
+      });
+
+      // support leaving the pointer while dragging
+      card.addEventListener('pointercancel', () => {
+        dragging = false;
+        card.style.transition = 'transform 200ms ease';
+        card.style.transform = '';
+        currentX = 0;
+      });
+    }
+
+    // Initialize handlers for current cards
+    Array.from(deck.querySelectorAll('.card')).forEach(attachCardHandlers);
+  </script>
+</body>
+</html>

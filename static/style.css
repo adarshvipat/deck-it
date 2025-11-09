@@ -1,0 +1,114 @@
+/* Base styling */
+body {
+    font-family: Arial, sans-serif;
+    background: #f8f9fa;
+    margin: 0;
+    padding: 0;
+}
+
+/* Centered container */
+.container {
+    width: 90%;
+    max-width: 500px;
+    margin: 40px auto;
+    background: #ffffff;
+    padding: 25px 20px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 25px;
+    font-size: 1.8em;
+}
+
+/* Form elements */
+input[type="url"] {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 15px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+}
+
+input[type="url"]:focus {
+    border-color: #007BFF;
+    outline: none;
+}
+
+button {
+    display: block;
+    width: 100%;
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    padding: 14px;
+    font-size: 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+/* Results section */
+.results {
+    margin-top: 30px;
+}
+
+.results h2 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 15px;
+}
+
+.results ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+.results li {
+    margin-bottom: 12px;
+    word-wrap: break-word;
+}
+
+.results a {
+    color: #007BFF;
+    text-decoration: none;
+}
+
+.results a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .container {
+        width: 95%;
+        padding: 20px 15px;
+    }
+
+    h1 {
+        font-size: 1.5em;
+    }
+
+    input[type="url"], button {
+        font-size: 16px;
+        padding: 12px;
+    }
+
+    button {
+        margin-top: 8px;
+    }
+}

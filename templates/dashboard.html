@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>📅 Week Board — Polished + Today Tasks Panel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* ========= THEME TOKENS ========= */
+  :root{
+    /* Surfaces */
+    --bg: #f6f7fb;
+    --bg-accent: radial-gradient(1200px 800px at 15% -10%, #ffffff 0%, #eef2f9 40%, #e9edf6 100%);
+    --card: #ffffff;
+    --card-grad: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.86));
+    --glass: rgba(255,255,255,.6);
+    --border: #e7e9ef;
+    --shadow: 0 8px 24px rgba(33, 37, 41, .06);
+
+    /* Text & Accents */
+    --text: #1f2937;
+    --muted: #6b7280;
+    --primary: #2563eb;
+    --primary-ink: #0b3fb3;
+    --ring: 0 0 0 2px rgba(37, 99, 235, .18);
+
+    /* Decorative */
+    --today: #e9f1ff;
+    --chip: #f4f7ff;
+
+    /* Category dots */
+    --dot1:#7c3aed; --dot2:#2563eb; --dot3:#10b981; --dot4:#f59e0b; --dot5:#ef4444;
+
+    /* Layout */
+    --header-h: 60px;
+    --col-gap: 12px;
+    --font-xxs: 10.5px; --font-xs: 11.5px; --font-s: 12.5px; --font-m: 13.5px;
+    --radius-lg: 14px; --radius-md: 12px; --radius-sm: 10px;
+
+    /* Caps so we never need scroll on a fixed display */
+    --max-events-day: 6;      /* non-today */
+    --max-events-today: 8;    /* in today column (left side) */
+    --max-tasks-today: 10;    /* in today column (right rail) */
+    --max-events-month: 3;
+    --max-tasks-panel: 8;     /* in the top-right global Tasks panel */
+  }
+  /* DARK */
+  body.dark{
+    --bg: #0f1218;
+    --bg-accent: radial-gradient(1200px 800px at 15% -10%, #1a1f2b 0%, #0f1218 55%, #0d1117 100%);
+    --card: #121620;
+    --card-grad: linear-gradient(180deg, rgba(18,22,32,.9), rgba(18,22,32,.86));
+    --glass: rgba(18,22,32,.6);
+    --border: #232839;
+    --shadow: 0 10px 26px rgba(0,0,0,.45);
+
+    --text: #e6ebf5;
+    --muted: #99a3b3;
+    --primary: #7aa2ff;
+    --primary-ink: #cfe0ff;
+    --ring: 0 0 0 2px rgba(122,162,255,.22);
+
+    --today: #1b2636;
+    --chip: #192136;
+
+    --dot1:#c3a3ff; --dot2:#82a3ff; --dot3:#7ee3b1; --dot4:#ffd27a; --dot5:#ff8f8f;
+  }
+
+  /* ========= BASE ========= */
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:'Inter',system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    background: var(--bg);
+    background-image: var(--bg-accent);
+    display:grid; grid-template-rows:var(--header-h) 1fr; overflow:hidden; /* fixed display */
+  }
+
+  /* ========= HEADER ========= */
+  header{
+    height:var(--header-h);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 16px;
+    backdrop-filter:saturate(140%) blur(6px);
+    background: linear-gradient(180deg, var(--glass), transparent);
+    border-bottom:1px solid var(--border);
+  }
+  .brand{font-weight:800; letter-spacing:.2px; color:var(--primary-ink)}
+  .controls{display:flex; gap:10px; align-items:center}
+  .seg{display:flex; background:var(--card); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow)}
+  .seg button{ border:0; background:transparent; padding:9px 14px; font-weight:700; color:var(--muted); cursor:pointer }
+  .seg button.active{ background:var(--primary); color:#fff; border-radius:10px; }
+  .btn{
+    appearance:none; border:1px solid var(--border); background:var(--card-grad);
+    color:var(--text); font-weight:700; font-size:12.5px; letter-spacing:.15px;
+    padding:9px 14px; border-radius:12px; cursor:pointer; box-shadow: var(--shadow);
+  }
+  .btn:focus-visible{ outline:none; box-shadow: var(--ring), var(--shadow); }
+
+  /* ========= MAIN LAYOUT ========= */
+  main{padding:14px 16px; height:100%; display:grid; grid-template-rows:auto 1fr; gap:12px}
+
+  /* Top row: Week/Month title (left) + Tasks Panel (right) */
+  .top-row{
+    display:grid;
+    grid-template-columns: 1fr 320px; /* right column reserved for tasks panel */
+    gap:12px;
+    align-items:start;
+  }
+  .week-title,.month-title{
+    font-weight:800; color:var(--muted); letter-spacing:.25px; font-size:var(--font-m);
+    padding-left:4px;
+  }
+
+  .tasks-panel{
+    background:var(--card-grad); border:1px solid var(--border); border-radius:var(--radius-lg);
+    box-shadow:var(--shadow); padding:10px; min-height:0; overflow:hidden;
+    display:grid; grid-template-rows:auto 1fr; gap:8px;
+  }
+  .tasks-panel h3{
+    margin:0; font-size:13.5px; font-weight:900; color:var(--primary-ink); letter-spacing:.2px;
+  }
+  .tp-list{ display:flex; flex-direction:column; gap:8px; }
+  .tp-item{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:8px 10px; display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:start;
+    font-size:var(--font-s); box-shadow:var(--shadow);
+  }
+  .tp-time{ color:var(--muted); font-size:var(--font-xs); white-space:nowrap }
+  .tp-title{ font-weight:800; font-size:var(--font-m); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .tp-meta{ font-size:var(--font-xs); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px }
+  .tp-more{ text-align:center; border:1px dashed var(--border); border-radius:var(--radius-md); padding:6px 8px; color:var(--muted); font-size:var(--font-xs); background:var(--chip) }
+
+  /* Content row switches between week board and month grid (both use the right 320px gap implicitly) */
+  .content-row{ height:100%; }
+
+  /* WEEK VIEW */
+  .board{
+    display:grid; grid-template-columns:repeat(7,1fr); gap:var(--col-gap); height:100%;
+  }
+  .day{
+    display:grid; grid-template-rows:auto 1fr; gap:10px;
+    background:var(--card-grad); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:12px; box-shadow:var(--shadow); overflow:hidden;
+  }
+  .day-header{
+    display:flex; align-items:center; justify-content:space-between;
+    font-weight:800; color:var(--muted); text-transform:uppercase; font-size:var(--font-s); letter-spacing:.3px;
+  }
+  .date-pill{
+    background:var(--today); color:var(--primary-ink);
+    border-radius:999px; padding:5px 10px; font-weight:900; font-size:var(--font-s);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .events{ display:flex; flex-direction:column; gap:8px; min-height:0 }
+  .event{
+    display:flex; gap:10px; align-items:flex-start;
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:8px 10px; box-shadow:var(--shadow);
+    font-size:var(--font-s);
+  }
+  .time{ min-width:78px; color:var(--muted); font-size:var(--font-xs); padding-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .title{ flex:1; font-weight:800; font-size:var(--font-m); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .meta{ font-size:var(--font-xs); color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px }
+  .more{
+    margin-top:auto; text-align:center; border:1px dashed var(--border); border-radius:var(--radius-md);
+    padding:8px 10px; color:var(--muted); font-size:var(--font-xs); background:var(--chip);
+  }
+  .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:8px; transform:translateY(-1px) }
+  .c1{background:var(--dot1)} .c2{background:var(--dot2)} .c3{background:var(--dot3)} .c4{background:var(--dot4)} .c5{background:var(--dot5)}
+
+  /* TODAY column: split events + tasks rail */
+  .today-grid{ display:grid; grid-template-columns:2fr 1fr; gap:10px; height:100% }
+  .tasks{
+    display:flex; flex-direction:column; gap:8px; min-width:0; overflow:hidden;
+    border-left:1px dashed var(--border); padding-left:10px;
+  }
+  .task{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-md); box-shadow:var(--shadow);
+    padding:8px 10px; font-size:var(--font-s);
+  }
+  .task h4{ margin:0 0 2px 0; font-size:var(--font-m); font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .task p{ margin:0; color:var(--muted); font-size:var(--font-xs); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+  /* MONTH VIEW */
+  .month-grid{ display:grid; grid-template-columns:repeat(7,1fr); grid-auto-rows:1fr; gap:12px; height:100% }
+  .cell{
+    background:var(--card-grad); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:10px; display:grid; grid-template-rows:auto 1fr; gap:8px; overflow:hidden; box-shadow:var(--shadow);
+  }
+  .cell-head{ display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-weight:800; font-size:var(--font-s) }
+  .cell-events{ display:flex; flex-direction:column; gap:6px }
+  .cell-event{
+    display:flex; gap:8px; align-items:center;
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px 8px;
+    font-size:var(--font-xs); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; box-shadow:var(--shadow);
+  }
+  .cell-more{ text-align:center; border:1px dashed var(--border); border-radius:var(--radius-sm); padding:6px 8px; color:var(--muted); font-size:var(--font-xs); background:var(--chip) }
+
+  /* Interactions off for display */
+  .no-interact{ user-select:none; pointer-events:none }
+  .hidden{ display:none !important }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">Modern Week Board</div>
+    <div class="controls">
+      <div class="seg" role="tablist" aria-label="View switch">
+        <button id="weekBtn" class="active" role="tab" aria-selected="true">Week</button>
+        <button id="monthBtn" role="tab" aria-selected="false">Calendar</button>
+      </div>
+      <button id="darkBtn" class="btn">🌙 Dark Mode</button>
+      <a href="{{ url_for('logout') }}" class="btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">Logout</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- Top row: title + global Today Tasks panel -->
+    <div class="top-row">
+      <div>
+        <div id="weekTitle" class="week-title">Loading…</div>
+        <div id="monthTitle" class="month-title hidden">Loading…</div>
+      </div>
+
+      <aside class="tasks-panel no-interact" id="tasksPanel">
+        <h3 id="tpHeading">Today’s Tasks</h3>
+        <div class="tp-list" id="tpList"><div style="color:var(--muted);font-size:var(--font-s)">Loading…</div></div>
+      </aside>
+    </div>
+
+    <!-- Content row switches the main view -->
+    <div class="content-row">
+      <!-- WEEK VIEW -->
+      <section id="weekView" class="no-interact">
+        <div class="board" id="board"></div>
+      </section>
+
+      <!-- MONTH VIEW -->
+      <section id="monthView" class="hidden no-interact">
+        <div class="month-grid" id="monthGrid"></div>
+      </section>
+    </div>
+  </main>
+
+<script>
+  /* ===== Utilities ===== */
+  const today = new Date();
+  function toLocalDateStr(d){const dt=new Date(d.getFullYear(),d.getMonth(),d.getDate());return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;}
+  function getStartOfWeek(date){const s=new Date(date.getFullYear(),date.getMonth(),date.getDate());s.setDate(s.getDate()-s.getDay());return s;}
+  function parseMin(t){if(!t||!/^\d{1,2}:\d{2}$/.test(t))return null;const [h,m]=t.split(':').map(Number);return h*60+m;}
+  function niceTime(a,b){ return a ? (b ? `${a} – ${b}` : a) : 'All day'; }
+  function weekLabel(start){
+    const end=new Date(start); end.setDate(start.getDate()+6);
+    const mo=(n)=>["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][n];
+    return `${mo(start.getMonth())} ${start.getDate()} — ${mo(end.getMonth())} ${end.getDate()}, ${end.getFullYear()}`;
+  }
+  function monthLabel(d){
+    const mo=(n)=>["January","February","March","April","May","June","July","August","September","October","November","December"][n];
+    return `${mo(d.getMonth())} ${d.getFullYear()}`;
+  }
+
+  /* ===== DOM ===== */
+  const weekView   = document.getElementById('weekView');
+  const monthView  = document.getElementById('monthView');
+  const weekTitle  = document.getElementById('weekTitle');
+  const monthTitle = document.getElementById('monthTitle');
+  const boardEl    = document.getElementById('board');
+  const monthGrid  = document.getElementById('monthGrid');
+  const weekBtn    = document.getElementById('weekBtn');
+  const monthBtn   = document.getElementById('monthBtn');
+  const darkBtn    = document.getElementById('darkBtn');
+
+  const tasksPanel = document.getElementById('tasksPanel');
+  const tpHeading  = document.getElementById('tpHeading');
+  const tpList     = document.getElementById('tpList');
+
+  /* ===== State / Caps ===== */
+  const MAX_DAY   = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--max-events-day')) || 6;
+  const MAX_TODAY = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--max-events-today')) || 8;
+  const MAX_TASKS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--max-tasks-today')) || 10;
+  const MAX_MONTH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--max-events-month')) || 3;
+  const MAX_TASKS_PANEL = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--max-tasks-panel')) || 8;
+
+  let eventsByDate = {};
+  let currentDate = new Date(today);
+
+  /* ===== Dark mode toggle ===== */
+  function initDark(){
+    if(localStorage.getItem('darkMode')==='enabled'){document.body.classList.add('dark');darkBtn.textContent='☀️ Light Mode';}
+    else {darkBtn.textContent='🌙 Dark Mode';}
+    darkBtn.addEventListener('click',()=>{
+      document.body.classList.toggle('dark');
+      const on=document.body.classList.contains('dark');
+      localStorage.setItem('darkMode',on?'enabled':'disabled');
+      darkBtn.textContent=on?'☀️ Light Mode':'🌙 Dark Mode';
+    });
+  }
+
+  /* ===== View toggle (Week default) ===== */
+  function showWeek(){
+    weekView.classList.remove('hidden'); monthView.classList.add('hidden');
+    weekBtn.classList.add('active'); monthBtn.classList.remove('active');
+    weekTitle.classList.remove('hidden'); monthTitle.classList.add('hidden');
+  }
+  function showMonth(){
+    monthView.classList.remove('hidden'); weekView.classList.add('hidden');
+    monthBtn.classList.add('active'); weekBtn.classList.remove('active');
+    weekTitle.classList.add('hidden'); monthTitle.classList.remove('hidden');
+  }
+  weekBtn.addEventListener('click', showWeek);
+  monthBtn.addEventListener('click', showMonth);
+
+  /* ===== Data ===== */
+  async function loadEvents(){
+    try{
+      const res = await fetch('/api/events');
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      eventsByDate = {};
+      data.forEach(ev=>{
+        const k = ev.date;
+        if(!eventsByDate[k]) eventsByDate[k]=[];
+        eventsByDate[k].push(ev);
+      });
+    }catch(e){ console.error('Failed to load events:',e); eventsByDate = {}; }
+  }
+
+  /* ===== Render: Global Today Tasks Panel ===== */
+  function renderTasksPanel(){
+    const ds = toLocalDateStr(today);
+    const list = (eventsByDate[ds]||[]).slice().sort((a,b)=>{
+      const am=parseMin(a.startTime)??-1, bm=parseMin(b.startTime)??-1; return am-bm;
+    });
+    tpHeading.textContent = `Today’s Tasks (${ds})`;
+    tpList.innerHTML = '';
+
+    const vis = list.slice(0, Math.min(MAX_TASKS_PANEL, list.length));
+    if(vis.length===0){
+      tpList.innerHTML = `<div style="color:var(--muted);font-size:var(--font-s)">No events for today.</div>`;
+      return;
+    }
+    vis.forEach((ev,idx)=>{
+      const item=document.createElement('div'); item.className='tp-item';
+      const time=document.createElement('div'); time.className='tp-time'; time.textContent = niceTime(ev.startTime, ev.endTime);
+      const body=document.createElement('div');
+      const title=document.createElement('div'); title.className='tp-title'; title.textContent = ev.title || 'Event';
+      const meta=document.createElement('div'); meta.className='tp-meta'; meta.textContent = ev.description || '';
+      body.appendChild(title); if(meta.textContent) body.appendChild(meta);
+      item.appendChild(time); item.appendChild(body);
+      tpList.appendChild(item);
+    });
+    const rem = list.length - vis.length;
+    if(rem>0){
+      const more=document.createElement('div'); more.className='tp-more'; more.textContent=`+${rem} more`;
+      tpList.appendChild(more);
+    }
+  }
+
+  /* ===== Render: Week ===== */
+  function weekLabelText(start){
+    const end=new Date(start); end.setDate(start.getDate()+6);
+    const mo=(n)=>["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][n];
+    return `${mo(start.getMonth())} ${start.getDate()} — ${mo(end.getMonth())} ${end.getDate()}, ${end.getFullYear()}`;
+  }
+  function renderWeek(start){
+    boardEl.innerHTML='';
+    weekTitle.textContent = weekLabelText(start);
+    const dayNames = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+    for(let i=0;i<7;i++){
+      const d=new Date(start); d.setDate(start.getDate()+i);
+      const ds = toLocalDateStr(d);
+      const isToday = (ds === toLocalDateStr(today));
+
+      const col = document.createElement('div'); col.className='day';
+
+      // header
+      const head = document.createElement('div'); head.className='day-header';
+      const left = document.createElement('div'); left.textContent = dayNames[d.getDay()];
+      const right = document.createElement('div'); right.className='date-pill'; right.textContent = d.getDate();
+      if(isToday){ left.style.color='var(--primary-ink)'; left.style.letterSpacing='.4px'; }
+      head.appendChild(left); head.appendChild(right);
+      col.appendChild(head);
+
+      const list = (eventsByDate[ds]||[]).slice().sort((a,b)=>{
+        const am=parseMin(a.startTime)??-1, bm=parseMin(b.startTime)??-1; return am-bm;
+      });
+
+      if(isToday){
+        /* two columns: events + tasks rail in today column */
+        const grid = document.createElement('div'); grid.className='today-grid';
+
+        const evWrap = document.createElement('div'); evWrap.className='events';
+        const evVis = list.slice(0, Math.min(MAX_TODAY, list.length));
+        evVis.forEach((ev,idx)=>{
+          const row=document.createElement('div'); row.className='event';
+          const time=document.createElement('div'); time.className='time'; time.textContent=niceTime(ev.startTime,ev.endTime);
+          const body=document.createElement('div'); body.style.minWidth='0';
+          const title=document.createElement('div'); title.className='title';
+          const dot=document.createElement('span'); dot.className=`dot c${(idx%5)+1}`;
+          const tspan=document.createElement('span'); tspan.textContent=ev.title||'Event';
+          title.appendChild(dot); title.appendChild(tspan);
+          const meta=document.createElement('div'); meta.className='meta'; meta.textContent=ev.description||'';
+          body.appendChild(title); if(meta.textContent) body.appendChild(meta);
+          row.appendChild(time); row.appendChild(body);
+          evWrap.appendChild(row);
+        });
+        const evRem=list.length-evVis.length;
+        if(evRem>0){ const more=document.createElement('div'); more.className='more'; more.textContent=`+${evRem} more`; evWrap.appendChild(more); }
+
+        const tasks=document.createElement('div'); tasks.className='tasks';
+        const tVis=list.slice(0, Math.min(MAX_TASKS, list.length));
+        tVis.forEach((ev)=>{
+          const t=document.createElement('div'); t.className='task';
+          t.innerHTML = `<h4>${ev.title||'Event'}</h4>
+            <p>${niceTime(ev.startTime,ev.endTime)}</p>
+            <p>${ev.description||''}</p>`;
+          tasks.appendChild(t);
+        });
+        const tRem=list.length - tVis.length;
+        if(tRem>0){ const tmore=document.createElement('div'); tmore.className='more'; tmore.textContent=`+${tRem} more`; tasks.appendChild(tmore); }
+
+        grid.appendChild(evWrap); grid.appendChild(tasks);
+        col.appendChild(grid);
+      } else {
+        const wrap=document.createElement('div'); wrap.className='events';
+        const visible=list.slice(0, Math.min(MAX_DAY, list.length));
+        visible.forEach((ev,idx)=>{
+          const row=document.createElement('div'); row.className='event';
+          const time=document.createElement('div'); time.className='time'; time.textContent=niceTime(ev.startTime,ev.endTime);
+          const body=document.createElement('div'); body.style.minWidth='0';
+          const title=document.createElement('div'); title.className='title';
+          const dot=document.createElement('span'); dot.className=`dot c${(idx%5)+1}`;
+          const tspan=document.createElement('span'); tspan.textContent=ev.title||'Event';
+          title.appendChild(dot); title.appendChild(tspan);
+          const meta=document.createElement('div'); meta.className='meta'; meta.textContent=ev.description||'';
+          body.appendChild(title); if(meta.textContent) body.appendChild(meta);
+          row.appendChild(time); row.appendChild(body);
+          wrap.appendChild(row);
+        });
+        const rem=list.length - visible.length;
+        if(rem>0){ const more=document.createElement('div'); more.className='more'; more.textContent=`+${rem} more`; wrap.appendChild(more); }
+        if(list.length===0){ const empty=document.createElement('div'); empty.className='event'; empty.innerHTML=`<div class="time"></div><div class="title" style="font-weight:800;color:var(--muted)">No events</div>`; wrap.appendChild(empty); }
+        col.appendChild(wrap);
+      }
+
+      boardEl.appendChild(col);
+    }
+  }
+
+  /* ===== Render: Month ===== */
+  function renderMonth(monthDate){
+    monthGrid.innerHTML='';
+    monthTitle.textContent = monthLabel(monthDate);
+
+    const year=monthDate.getFullYear(), month=monthDate.getMonth();
+    const first=new Date(year, month, 1);
+    const startDay=first.getDay();
+    const daysInMonth=new Date(year, month+1, 0).getDate();
+
+    for(let i=0;i<startDay;i++){ const empty=document.createElement('div'); empty.className='cell'; monthGrid.appendChild(empty); }
+
+    for(let day=1; day<=daysInMonth; day++){
+      const d=new Date(year,month,day), ds=toLocalDateStr(d), isToday=(ds===toLocalDateStr(today));
+      const cell=document.createElement('div'); cell.className='cell';
+      const head=document.createElement('div'); head.className='cell-head';
+      head.innerHTML = `<span style="${isToday?'color:var(--primary-ink);font-weight:900;':''}">${day}</span>`;
+      cell.appendChild(head);
+
+      const listWrap=document.createElement('div'); listWrap.className='cell-events';
+      const list=(eventsByDate[ds]||[]).slice().sort((a,b)=>{
+        const am=parseMin(a.startTime)??-1, bm=parseMin(b.startTime)??-1; return am-bm;
+      });
+      const visible=list.slice(0, Math.min(MAX_MONTH, list.length));
+      visible.forEach((ev,idx)=>{
+        const item=document.createElement('div'); item.className='cell-event';
+        item.innerHTML=`<span class="dot c${(idx%5)+1}"></span>
+          <span style="min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ev.title||'Event'} · ${ev.startTime?ev.startTime:'All day'}</span>`;
+        listWrap.appendChild(item);
+      });
+      const rem=list.length-visible.length;
+      if(rem>0){ const more=document.createElement('div'); more.className='cell-more'; more.textContent=`+${rem} more`; listWrap.appendChild(more); }
+      cell.appendChild(listWrap);
+      monthGrid.appendChild(cell);
+    }
+  }
+
+  /* ===== Init ===== */
+  async function init(){
+    initDark();
+    showWeek(); // default
+    try{ await loadEvents(); }catch{}
+    const start = getStartOfWeek(new Date(today));
+    weekTitle.textContent = weekLabel(start);
+    renderWeek(start);
+    renderMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    renderTasksPanel(); // <- global Today tasks (panel)
+  }
+  document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

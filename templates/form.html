@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Links Form</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="container">
+        <h1>Sign Up</h1>
+        <form method="POST">
+          <div>
+                <label for="email">Enter Your Email:</label><br/>
+                <input type="email" id="email" name="email" placeholder="mail@example.com" style="width:400px" required/>
+            </div>
+            <div>
+                <label for="pwd">Create a Password:</label><br/>
+                <input type="password" id="pwd" name="pwd" placeholder="*********" style="width:400px" required/>
+            </div>
+            <div>
+                <label for="canvas_link">Canvas link (first):</label><br/>
+                <input type="url" id="canvas_link" name="canvas_link" placeholder="https://canvas.example.edu/..." style="width:400px" required/>
+            </div>
+
+            <fieldset>
+                <legend>Choose as many as you like:</legend>
+                <label>
+                  <input type="checkbox" name="options" value='TRUE' />
+                  Subscribe to Campus Pulse Updates
+                </label><br/>
+                <label>
+                  <input type="checkbox" name="options" value='TRUE' />
+                  UMass Events Page
+                </label>
+            </fieldset>
+
+            <div>
+                <p>Custom website links (enter any you want):</p>
+                <input type="url" name="custom1" placeholder="https://example.com/..." style="width:400px"/><br/>
+                <input type="url" name="custom2" placeholder="https://example.com/..." style="width:400px"/><br/>
+                <input type="url" name="custom3" placeholder="https://example.com/..." style="width:400px"/><br/>
+            </div>
+
+            <button type="submit">Submit</button>
+        </form>
+        <p style="margin-top:10px;">Already have an account? <a href="{{ url_for('login') }}">Login</a></p>
+        {% if submitted %}
+        <div class="results">
+            <h2>Stored Links</h2>
+            <ul>
+                {% for link in links %}
+                <li><a href="{{ link }}" target="_blank" rel="noopener noreferrer">{{ link }}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+  </body>
+</html>

@@ -1,181 +1,247 @@
-#!/usr/bin/env python3
-"""Route a list of links into a single file-download link and 1-4 website links.
-
-Behavior:
-- The script starts with a default list of 4 links (simulate data coming from a DB).
-- The first link is treated as the file-download link (handled by `link_to_file.download_file`).
-- The remaining 1-4 links are treated as website URLs to be scraped and converted to ICS (handled by functions in `website_to_ics`).
-
-Notes:
-- This file does NOT implement any database access. Replace the `STARTING_LINKS` list with data from your DB as needed.
-- By default the script performs a dry-run and prints the planned actions. Pass `--execute` to actually call the network functions.
-"""
-
-from typing import List, Tuple
-import sys
-import os
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from ics import Calendar, Event
+import urllib.parse as urlparse
+import psycopg2
 import json
+import os
 
-# Import existing utilities in the workspace
+# ---- Backend imports ----
 import link_to_file
 import website_to_ics
+import file_to_list
 
-user_data = ["canvas", "cust1", "cust2", "cust3", False, False]
-PULSE_LINK = "https://nam10.safelinks.protection.outlook.com/?url=https%3A%2F%2Fumassamherst.campuslabs.com%2Fengage%2Fevents.rss&data=05%7C02%7Cavipat%40umass.edu%7C6d97f951cb0c43f93bba08de1f07140a%7C7bd08b0b33954dc194bbd0b2e56a497f%7C0%7C0%7C638982312467157124%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=JBFkIVkgZb%2BJmd28TiVOboHtsPCjU%2BIeTKP5rnjqCn0%3D&reserved=0"
-EVENTS_LINK = "https://nam10.safelinks.protection.outlook.com/?url=https%3A%2F%2Fevents.umass.edu%2Fcalendar%2F1.xml&data=05%7C02%7Cavipat%40umass.edu%7C6d97f951cb0c43f93bba08de1f07140a%7C7bd08b0b33954dc194bbd0b2e56a497f%7C0%7C0%7C638982312467169986%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=mdI%2FtR9Jj8B973%2BXgoSCJkY0%2FUU6CrRThsplXHcxXiA%3D&reserved=0"
+app = Flask(__name__)
+app.secret_key = "deckit_secret"
 
+# ---- Database setup ----
+db_url = ''
+url = urlparse.urlparse(db_url)
+dbusername = url.username
+dbpassword = url.password
+hostname = url.hostname
+port = url.port if url.port else 5432
+dbname = url.path[1:]
+conn = psycopg2.connect(
+    host=hostname,
+    port=port,
+    dbname=dbname,
+    user=dbusername,
+    password=dbpassword,
+    sslmode='require'
+)
+cursor = conn.cursor()
+print("Connection successful!")
 
-# Starting list with 4 links as requested (simulate input from database)
-STARTING_LINKS: List = [
-    "https://umamherst.instructure.com/feeds/calendars/user_4P53rwLSe3MpHunzpOXy3t1ne94H8QcML7H8RfI5.ics",           # file to download
-    "https://www.eventbrite.com/d/ma--hadley/events/",        # website to convert to ICS
-    "",          # website to convert to ICS
-    "",          # website to convert to ICS
-    "",          # preference for campus pulse
-    ""           # preference for umass events
-]
+# ---- Globals ----
+stored_links = []
+stored_yes = []
+EVENTS = []
 
-# Check user_data for boolean True at positions 3 and 4 (0-based index)
-# If so, set STARTING_LINKS[4] and STARTING_LINKS[5] accordingly
-if isinstance(user_data, (list, tuple)):
-    if user_data[4] is True:
+# ---- UMass links ----
+PULSE_LINK = "https://umassamherst.campuslabs.com/engage/events.rss"
+EVENTS_LINK = "https://events.umass.edu/calendar/1.xml"
+
+# ============================================================
+# Utility: backend link pipeline (from second app.py)
+# ============================================================
+def process_links(user_data):
+    """
+    Takes user_data tuple from DB and runs:
+    - download Canvas .ics file
+    - scrape optional websites and convert to .ics
+    - extract all events into a unified list
+    """
+    canvas_link, cust1, cust2, cust3, cppref, umevpref = user_data
+    STARTING_LINKS = [canvas_link, cust1, cust2, cust3, "", ""]
+
+    # Add Pulse / UMass events based on preferences
+    if cppref:
         STARTING_LINKS[4] = PULSE_LINK
-    if user_data[5] is True:
+    if umevpref:
         STARTING_LINKS[5] = EVENTS_LINK
 
-def split_links(links: List[str]) -> Tuple[str, List[str]]:
-    """Assume the first link is the file to download and the rest are website links.
+    file_link = STARTING_LINKS[0]
+    web_links = [x for x in STARTING_LINKS[1:6] if x.strip()]
 
-    This follows the expected DB contract: 1 link for file download, 1-4 links for web->ICS.
-    If fewer than 2 links are provided, raises ValueError.
-    """
-    if not links or len(links) < 2:
-        raise ValueError("Expected at least 2 links: 1 file link and 1 website link")
+    
 
-    file_link = links[0]
-    web_links = links[1:6]  # allow up to 4 website links
-    return file_link, web_links
-
-
-def dry_run(file_link: str, web_links: List[str]):
-    """Print planned actions without performing network calls."""
-    print("DRY RUN: The script will perform the following actions:")
-    print(f"- Download file from: {file_link}")
-    print(f"- Convert {len(web_links)} website(s) to ICS:")
-    for i, url in enumerate(web_links, 1):
-        print(f"  {i}. {url}")
-    print("\nTo actually perform downloads and scraping, run with the --execute flag.")
-
-
-def execute(file_link: str, web_links: List[str]):
-    """Perform the real actions using the existing modules in the workspace.
-
-    - Calls link_to_file.download_file(file_link)
-    - For each website link: scrapes the website, calls extract_events_with_ollama (requires OPENROUTER_API_KEY),
-      and then writes ICS using create_ics_file.
-
-    WARNING: extract_events_with_ollama requires an OpenRouter API key in the environment
-    variable OPENROUTER_API_KEY or passed in; if not set the call will exit.
-    """
-    # Download file
-    print(f"Downloading file from: {file_link}")
-    try:
-        downloaded = link_to_file.download_file(file_link)
-        print(f"Downloaded file saved as: {downloaded}")
-    except SystemExit:
-        print("link_to_file raised SystemExit (download failed). Aborting execution.")
-        return
-    except Exception as e:
-        print(f"Unexpected error during download: {e}")
-        return
-
-    # Process websites
+    # --- Step 2: Scrape each website and generate ICS files
     for url in web_links:
-        print(f"\nProcessing website: {url}")
         try:
+            print(f"Scraping: {url}")
             scraped = website_to_ics.scrape_website(url)
-            print(f"Scraped {len(scraped)} characters from {url}")
-
-            # Attempt to extract events and create ICS. This function expects an API key
-            # to be set in OPENROUTER_API_KEY or passed as parameter. We call it as-is so
-            # it uses the environment variable.
             events_ics = website_to_ics.extract_events_with_openrouter(scraped)
-
-            # Write events to an ICS file. Name will default to events.ics and auto-increment
             website_to_ics.create_ics_file(events_ics)
-
-        except SystemExit:
-            print(f"website_to_ics aborted while processing {url} (likely missing API key or HTTP error). Continuing to next url.")
-            continue
         except Exception as e:
             print(f"Error processing {url}: {e}")
-            continue
 
-
-def load_links_from_json(path: str) -> List[str]:
-    """Utility to load a JSON array of links to simulate DB input.
-
-    Example JSON file content: ["https://...", "https://...", ...]
-    Returns the list from the file or raises on error.
-    """
-    with open(path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    if not isinstance(data, list):
-        raise ValueError("JSON must contain a list of links")
-    return data
-
-
-def main(argv: List[str]):
-    """Entry point.
-
-    Usage:
-      python app2.py            # dry-run using built-in STARTING_LINKS
-      python app2.py --execute  # actually perform network actions
-      python app2.py links.json --execute  # load links from JSON file and execute
-    """
-    execute_mode = False
-    links_source = None
-
-    args = argv[1:]
-    if '--execute' in args:
-        execute_mode = True
-        args.remove('--execute')
-
-    if args:
-        # If a path is provided, load links from it (simulate DB input)
-        links_source = args[0]
-
-    if links_source:
-        try:
-            links = load_links_from_json(links_source)
-        except Exception as e:
-            print(f"Failed to load links from {links_source}: {e}")
-            return
-    else:
-        links = STARTING_LINKS
-
-    try:
-        file_link, web_links = split_links(links)
-    except ValueError as e:
-        print(f"Invalid links input: {e}")
-        return
-
-    if not execute_mode:
-        dry_run(file_link, web_links)
-    else:
-        execute(file_link, web_links)
-
-    # After all actions, extract events from all .ics files using file_to_list
-    import file_to_list
-    print("\nExtracting events from all .ics files...")
-    events = []
+    # --- Step 3: Combine all ICS events into list
+    all_events = []
     for fname in os.listdir('.'):
         if fname.lower().endswith('.ics') and os.path.isfile(fname):
-            events.extend(file_to_list.extract_events_from_ics(fname))
-    print(f"Extracted {len(events)} events from .ics files.")
-    # Optionally, print the events list or process as needed
-    #print(events)
+            try:
+                all_events.extend(file_to_list.extract_events_from_ics(fname))
+            except Exception as e:
+                print(f"Failed reading {fname}: {e}")
+    # --- Step 1: Download Canvas file (.ics)
+    try:
+        downloaded_file = link_to_file.download_file(file_link)
+        print(f"Downloaded Canvas ICS: {downloaded_file}")
+    except Exception as e:
+        print(f"Canvas download failed: {e}")
+
+    print(f"Extracted {len(all_events)} total events.")
+    return all_events
+
+
+# ============================================================
+# Flask routes
+# ============================================================
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    global stored_links
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        pwd = request.form.get('pwd', '').strip()
+        canvas = request.form.get('canvas_link', '').strip()
+
+        selected_options = request.form.getlist('options')
+        cppref = "TRUE" if "TRUE" in selected_options else "FALSE"
+        umeventspref = "TRUE" if len(selected_options) > 1 and selected_options[1] == 'TRUE' else "FALSE"
+
+        cust1 = request.form.get('custom1', '').strip()
+        cust2 = request.form.get('custom2', '').strip()
+        cust3 = request.form.get('custom3', '').strip()
+
+        q1 = f"INSERT INTO login VALUES('{email}','{pwd}','{canvas}','{cust1}','{cust2}','{cust3}',{cppref},{umeventspref});"
+        cursor.execute(q1)
+        conn.commit()
+
+        cursor.execute("SELECT cust1,cust2,cust3,canvaslink FROM login;")
+        stored_links = cursor.fetchall()
+        return render_template('form.html', links=stored_links, submitted=True)
+    return render_template('form.html', links=stored_links, submitted=False)
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        pwd = request.form.get('pwd', '').strip()
+        cursor.execute("SELECT * FROM login WHERE email=%s AND password=%s;", (email, pwd))
+        user = cursor.fetchone()
+        if user:
+            session['user'] = email
+            return redirect(url_for('deck'))
+        else:
+            return render_template('login.html', error="Invalid email or password.")
+    return render_template('login.html', error=None)
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+
+@app.route('/deck')
+def deck():
+    """Deck route: fetch user prefs, run backend pipeline, render event cards."""
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    email = session['user']
+    cursor.execute(f"SELECT canvaslink, cust1, cust2, cust3, cppref, umevpref FROM login WHERE email='{email}';")
+    user_data = cursor.fetchone()
+    if not user_data:
+        return "User data not found in DB.", 400
+
+    # Run backend logic to gather events
+    global EVENTS
+    EVENTS = process_links(user_data)
+
+    if not EVENTS:
+        EVENTS = [{'id': 1, 'title': 'No events found', 'date': 'N/A', 'start_time': '', 'end_time': '', 'location': '', 'desc': ''}]
+    else:
+        # Ensure each has ID field for deck voting
+        for i, e in enumerate(EVENTS, start=1):
+            e['id'] = i
+
+    # Check if user already saved events
+    cursor.execute(f"SELECT * FROM selected WHERE email='{email}';")
+    check = cursor.fetchall()
+    if check:
+        return redirect(url_for('dashboard'))
+    return render_template('deck.html', events=EVENTS)
+
+
+@app.route('/dashboard')
+def dashboard():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    cursor.execute(f"SELECT file_data FROM selected WHERE email='{session['user']}';")
+    row = cursor.fetchone()
+    ics_string = row[0] if row and row[0] else ''
+    parsed = []
+
+    def parse_ics_string(ics_string):
+        events = []
+        if not ics_string:
+            return events
+        try:
+            cal = Calendar(ics_string)
+        except Exception:
+            return events
+        for e in cal.events:
+            try:
+                start_date = e.begin.format('YYYY-MM-DD')
+                start_time = e.begin.format('HH:mm')
+                end_time = e.end.format('HH:mm')
+            except Exception:
+                start_date, start_time, end_time = 'N/A', '', ''
+            events.append({
+                'title': e.name or 'Event',
+                'description': e.description or '',
+                'date': start_date,
+                'startTime': start_time,
+                'endTime': end_time
+            })
+        return events
+
+    parsed = parse_ics_string(ics_string) if ics_string else globals().get('EVENTS', [])
+    return render_template('dashboard.html', events=parsed)
+
+@app.route('/vote', methods=['POST'])
+def vote():
+    
+    global stored_yes
+    data = request.get_json() or {}
+    event_id = data.get('id')
+    vote = data.get('vote')  # expected 'yes' or 'no'
+    if event_id is None or vote not in ('yes', 'no'):
+        return jsonify({'status': 'error', 'message': 'invalid payload'}), 400
+
+    # find event
+    event = next((e for e in EVENTS if e['id'] == event_id), None)
+    if not event:
+        return jsonify({'status': 'error', 'message': 'event not found'}), 404
+
+    if vote == 'yes':
+        # avoid duplicates
+        if not any(e['id'] == event_id for e in stored_yes):
+            stored_yes.append(event)
+        
+        save_selected_events()
+        return jsonify({'status': 'ok'})
+
+
+def save_selected_events():
+    databytes = "\n".join(e.get('title', 'unknown') for e in stored_yes)
+    q3 = f"INSERT INTO selected VALUES('{session['user']}','{databytes}');"
+    cursor.execute(q3)
+    conn.commit()
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    app.run(debug=False, host='0.0.0.0', port=5002)
